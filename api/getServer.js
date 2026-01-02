@@ -2,16 +2,15 @@ import fetch from "node-fetch";
 
 const PLACE_ID = "109983668079237";
 
-// ===== DISCORD LOGGING =====
-const WEBHOOK_URL =
-  "https://discord.com/api/webhooks/1456482268339114206/qsg3Bw994eEbDNANQtzo_bstAJ9P8XBV-dzsvldyt2PWYFIorXWdwrx--nCTe8ab_s7D";
-
-const ALERT_USER_ID = "1424221517159465071";
-
 // ===== CONFIG =====
 const CACHE_TTL = 20 * 1000;            // 20 seconds
 const USED_RESET_TIME = 60 * 60 * 1000; // 1 hour
-const MAX_PAGES = 1;
+const MAX_PAGES = 1;                    // RECOMMENDED
+
+// ===== DISCORD LOGGING =====
+const WEBHOOK_URL =
+  "https://discord.com/api/webhooks/1456482268339114206/qsg3Bw994eEbDNANQtzo_bstAJ9P8XBV-dzsvldyt2PWYFIorXWdwrx--nCTe8ab_s7D";
+const ALERT_USER_ID = "1424221517159465071";
 
 // ===== STATE =====
 let cachedServers = [];
@@ -20,15 +19,15 @@ let lastFetchTime = 0;
 let USED_SERVERS = new Set();
 let lastUsedReset = Date.now();
 
-// ===== DISCORD WEBHOOK SENDER =====
-async function sendLog(content) {
+// ===== LOGGING =====
+async function log(msg) {
     try {
         await fetch(WEBHOOK_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ content })
+            body: JSON.stringify({ content: msg })
         });
-    } catch (_) {}
+    } catch {}
 }
 
 // ===== RESET USED SERVERS =====
@@ -36,11 +35,12 @@ function resetUsedServersIfNeeded() {
     if (Date.now() - lastUsedReset >= USED_RESET_TIME) {
         USED_SERVERS.clear();
         lastUsedReset = Date.now();
+        log("🔄 Used servers reset");
     }
 }
 
-// ===== FETCH + CACHE ROBLOX SERVERS =====
-async function getCachedServers() {
+// ===== FETCH + CACHE SERVERS =====
+async function getCachedServers(botId) {
     const now = Date.now();
 
     if (cachedServers.length > 0 && now - lastFetchTime < CACHE_TTL) {
@@ -56,29 +56,19 @@ async function getCachedServers() {
           `https://games.roblox.com/v1/games/${PLACE_ID}/servers/Public?limit=100&sortOrder=Asc`;
         if (cursor) url += `&cursor=${cursor}`;
 
-        // LOG: Roblox API usage
-        await sendLog(
-            `📡 Roblox API request\nPlaceId: ${PLACE_ID}\nPage: ${page + 1}`
-        );
+        await log(`📡 Roblox API fetch | Bot: ${botId} | Page ${page + 1}`);
 
         const res = await fetch(url);
 
-        // RATE LIMIT ERROR
         if (res.status === 429) {
-            await sendLog(
-                `🚨 **ROBLOX RATE LIMITED**\n<@${ALERT_USER_ID}>\nResponse: Too many requests`
-            );
-
-            // fallback to cache
-            if (cachedServers.length > 0) return cachedServers;
-            break;
+            await log(`🚨 RATE LIMITED <@${ALERT_USER_ID}>`);
+            return cachedServers;
         }
 
         const data = await res.json();
         if (!data?.data) break;
 
         servers.push(...data.data);
-
         cursor = data.nextPageCursor;
         if (!cursor) break;
         page++;
@@ -97,7 +87,12 @@ export default async function handler(req, res) {
 
     resetUsedServersIfNeeded();
 
-    const { action, serverId } = req.body;
+    const { action, serverId, botId, currentServerId } = req.body;
+
+    // Auto-mark current server as used
+    if (currentServerId) {
+        USED_SERVERS.add(currentServerId);
+    }
 
     if (action === "clear") {
         USED_SERVERS.clear();
@@ -111,7 +106,7 @@ export default async function handler(req, res) {
 
     if (action === "get") {
         try {
-            const servers = await getCachedServers();
+            const servers = await getCachedServers(botId || "unknown");
 
             for (const server of servers) {
                 if (
@@ -124,12 +119,10 @@ export default async function handler(req, res) {
                 }
             }
 
-            return res.status(404).json({ error: "No available servers" });
+            return res.status(404).json({ error: "No servers available" });
 
         } catch (err) {
-            await sendLog(
-                `❌ API ERROR\n<@${ALERT_USER_ID}>\n${String(err)}`
-            );
+            await log(`❌ ERROR <@${ALERT_USER_ID}> ${err}`);
             return res.status(500).json({ error: "Server error" });
         }
     }
