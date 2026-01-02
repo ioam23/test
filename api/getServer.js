@@ -5,7 +5,7 @@ const PLACE_ID = "109983668079237";
 // ===== CONFIG =====
 const CACHE_TTL = 20 * 1000;            // 20 seconds
 const USED_RESET_TIME = 60 * 60 * 1000; // 1 hour
-const MAX_PAGES = 1;                    // RECOMMENDED
+const MAX_PAGES = 2;                    // RECOMMENDED
 
 // ===== DISCORD LOGGING =====
 const WEBHOOK_URL =
