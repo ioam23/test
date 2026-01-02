@@ -1,10 +1,8 @@
 import fetch from "node-fetch";
 
-const USED_SERVERS = new Set();
-
-// CHANGE THIS
 const PLACE_ID = "109983668079237";
-const MAX_PAGES = 5; // safety limit
+const USED_SERVERS = new Set();
+const MAX_PAGES = 10;
 
 export default async function handler(req, res) {
     if (req.method !== "POST") {
@@ -19,17 +17,18 @@ export default async function handler(req, res) {
         return res.json({ status: "confirmed" });
     }
 
-    // FAILED SERVER
+    // TELEPORT FAILED
     if (action === "failed") {
         if (serverId) USED_SERVERS.add(serverId);
         return res.json({ status: "failed_logged" });
     }
 
-    // GET NEW SERVER
+    // GET SERVER
     if (action === "get") {
         try {
             let cursor = null;
             let page = 0;
+            let candidates = [];
 
             while (page < MAX_PAGES) {
                 let url = `https://games.roblox.com/v1/games/${PLACE_ID}/servers/Public?limit=100&sortOrder=Asc`;
@@ -38,15 +37,16 @@ export default async function handler(req, res) {
                 const response = await fetch(url);
                 const data = await response.json();
 
-                if (!data.data) break;
+                if (!data?.data) break;
 
                 for (const server of data.data) {
                     if (
+                        server.playing < 7 &&                      // max players < 7
                         server.playing < server.maxPlayers &&
+                        typeof server.ping === "number" &&
                         !USED_SERVERS.has(server.id)
                     ) {
-                        USED_SERVERS.add(server.id);
-                        return res.json({ serverId: server.id });
+                        candidates.push(server);
                     }
                 }
 
@@ -55,10 +55,25 @@ export default async function handler(req, res) {
                 page++;
             }
 
-            return res.status(404).json({ error: "No available servers" });
+            if (candidates.length === 0) {
+                return res.status(404).json({ error: "No suitable servers found" });
+            }
+
+            // PICK LOWEST PING SERVER
+            candidates.sort((a, b) => a.ping - b.ping);
+            const chosen = candidates[0];
+
+            USED_SERVERS.add(chosen.id);
+
+            return res.json({
+                serverId: chosen.id,
+                ping: chosen.ping,
+                playing: chosen.playing
+            });
 
         } catch (err) {
-            return res.status(500).json({ error: "Roblox API error" });
+            console.error(err);
+            return res.status(500).json({ error: "Roblox API failure" });
         }
     }
 
