@@ -11,6 +11,12 @@ export default async function handler(req, res) {
 
     const { action, serverId } = req.body;
 
+    // CLEAR USED SERVERS
+    if (action === "clear") {
+        USED_SERVERS.clear();
+        return res.json({ status: "cleared" });
+    }
+
     // CONFIRM SUCCESS
     if (action === "confirm") {
         if (serverId) USED_SERVERS.add(serverId);
@@ -28,7 +34,6 @@ export default async function handler(req, res) {
         try {
             let cursor = null;
             let page = 0;
-            let candidates = [];
 
             while (page < MAX_PAGES) {
                 let url = `https://games.roblox.com/v1/games/${PLACE_ID}/servers/Public?limit=100&sortOrder=Asc`;
@@ -41,12 +46,12 @@ export default async function handler(req, res) {
 
                 for (const server of data.data) {
                     if (
-                        server.playing < 7 &&                      // max players < 7
+                        server.playing < 7 &&
                         server.playing < server.maxPlayers &&
-                        typeof server.ping === "number" &&
                         !USED_SERVERS.has(server.id)
                     ) {
-                        candidates.push(server);
+                        USED_SERVERS.add(server.id);
+                        return res.json({ serverId: server.id });
                     }
                 }
 
@@ -55,25 +60,11 @@ export default async function handler(req, res) {
                 page++;
             }
 
-            if (candidates.length === 0) {
-                return res.status(404).json({ error: "No suitable servers found" });
-            }
-
-            // PICK LOWEST PING SERVER
-            candidates.sort((a, b) => a.ping - b.ping);
-            const chosen = candidates[0];
-
-            USED_SERVERS.add(chosen.id);
-
-            return res.json({
-                serverId: chosen.id,
-                ping: chosen.ping,
-                playing: chosen.playing
-            });
+            return res.status(404).json({ error: "No available servers" });
 
         } catch (err) {
             console.error(err);
-            return res.status(500).json({ error: "Roblox API failure" });
+            return res.status(500).json({ error: "Roblox API error" });
         }
     }
 
