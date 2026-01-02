@@ -11,7 +11,7 @@ const ALERT_USER_ID = "1424221517159465071";
 // ===== CONFIG =====
 const CACHE_TTL = 20 * 1000;            // 20 seconds
 const USED_RESET_TIME = 60 * 60 * 1000; // 1 hour
-const MAX_PAGES = 3;
+const MAX_PAGES = 1;
 
 // ===== STATE =====
 let cachedServers = [];
